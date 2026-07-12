@@ -650,13 +650,13 @@ sequenceDiagram
         API-->>Client: 401 Unauthorized
     else Valid credentials
         API->>API: Generate JWT pair
-        Note right of API: access: 15min<br/>refresh: 7 days
+        Note right of API: access token: 15min, refresh token: 7 days
         API-->>Client: { access_token, refresh_token, user }
         Client->>Client: Store tokens (localStorage/memory)
     end
 
-    Note over Client,API: Subsequent requests
-    Client->>API: GET /api/resource (Authorization: Bearer &lt;access_token&gt;)
+    Note over Client,API: Subsequent requests use Bearer token
+    Client->>API: GET /api/resource with Authorization header
     API->>API: Validate JWT signature + expiry
     alt Token valid
         API-->>Client: 200 OK { data }
@@ -756,13 +756,13 @@ def require_roles(*roles: str):
 
 ```mermaid
 graph TD
-    APP["&lt;App&gt;"]
-    BR["&lt;BrowserRouter&gt;"]
-    RS["&lt;Routes&gt;"]
+    APP["App"]
+    BR["BrowserRouter"]
+    RS["Routes"]
 
-    Login["/login → &lt;LoginPage /&gt;"]
-    PR["&lt;ProtectedRoute /&gt;"]
-    ML["&lt;MainLayout /&gt;"]
+    Login["/login → LoginPage"]
+    PR["ProtectedRoute"]
+    ML["MainLayout"]
 
     DASH["/dashboard → DashboardPage"]
     VEH["/vehicles → VehiclesPage"]
@@ -882,11 +882,11 @@ flowchart TD
 
     subgraph B["AnalyticsService.get_dashboard()"]
         direction TB
-        Q1["Vehicle status counts<br/><code>SELECT status, COUNT(*) FROM vehicles GROUP BY status</code>"]
-        Q2["Active trips count<br/><code>SELECT COUNT(*) FROM trips WHERE status = 'dispatched'</code>"]
-        Q3["Pending trips count<br/><code>SELECT COUNT(*) FROM trips WHERE status = 'draft'</code>"]
-        Q4["Drivers on duty<br/><code>SELECT COUNT(*) FROM drivers WHERE status IN ('available','on_trip')</code>"]
-        Q5["Fleet utilization %<br/><code>(on_trip / total_active) × 100</code>"]
+        Q1["Vehicle status counts (GROUP BY status)"]
+        Q2["Active trips count (status = dispatched)"]
+        Q3["Pending trips count (status = draft)"]
+        Q4["Drivers on duty (available or on_trip)"]
+        Q5["Fleet utilization % (on_trip / total_active × 100)"]
 
         Q1 --> AGG
         Q2 --> AGG
