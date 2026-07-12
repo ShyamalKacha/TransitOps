@@ -47,6 +47,7 @@ Logistics companies manage vehicles, drivers, trips, maintenance, and expenses u
 - **Analytics Dashboard** — KPIs, charts, CSV & PDF export
 
 **User Roles:**
+- **Admin** — Configured via `.env`. Can create/manage all user types. Full access to all modules, settings, and exports.
 - **Fleet Manager** — Vehicle: Add/Edit/Delete/View. Driver: Add/Edit/Delete/View. Dashboard: View. Trip: View. Analytics: View.
 - **Dispatcher** — Create trip, assign vehicles to driver, edit/delete/view trips. See vehicle and driver details.
 - **Driver** — View only trips assigned to them: vehicle, source/destination, time/date, profit earned.
@@ -123,7 +124,7 @@ transitops/
 │   │   ├── modules/
 │   │   │   ├── auth/
 │   │   │   │   ├── __init__.py
-│   │   │   │   ├── router.py          # POST /login, /register, /refresh, GET /me
+│   │   │   │   ├── router.py          # POST /login, /refresh, GET /me; admin endpoints
 │   │   │   │   ├── schemas.py         # LoginRequest, TokenResponse, UserOut
 │   │   │   │   ├── service.py         # hash_password, verify_password, create_token
 │   │   │   │   └── models.py          # User model
@@ -238,6 +239,7 @@ transitops/
 │   │   │   ├── FuelExpensesPage.tsx
 │   │   │   ├── FinancialAnalyticsPage.tsx    # Financial analyst dashboard
 │   │   │   ├── AnalyticsPage.tsx             # Fleet manager analytics
+│   │   │   ├── AdminUsersPage.tsx            # Admin: user management
 │   │   │   └── NotFoundPage.tsx
 │   │   ├── types/
 │   │   │   └── index.ts              # Shared TypeScript interfaces
@@ -266,7 +268,7 @@ transitops/
 
 | Entity               | Table                | Key Fields (beyond basics)                        |
 | -------------------- | -------------------- | ------------------------------------------------- |
-| User                 | `users`              | email (unique), password_hash, role (enum)        |
+| User                 | `users`              | email (unique), password_hash, role (enum: admin/fleet_manager/dispatcher/driver/safety_officer/financial_analyst) |
 | Vehicle              | `vehicles`           | registration_number (unique), status (enum)       |
 | Driver               | `drivers`            | license_number (unique), license_expiry_date, status (enum) |
 | Trip                 | `trips`              | vehicle_id (FK), driver_id (FK), status (enum), revenue, driver_earnings |
@@ -282,7 +284,7 @@ CREATE TABLE users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email           VARCHAR(255) UNIQUE NOT NULL,
     password_hash   VARCHAR(255) NOT NULL,
-    role            VARCHAR(20) NOT NULL CHECK (role IN ('fleet_manager','dispatcher','driver','safety_officer','financial_analyst')),
+    role            VARCHAR(20) NOT NULL CHECK (role IN ('admin','fleet_manager','dispatcher','driver','safety_officer','financial_analyst')),
     name            VARCHAR(255) NOT NULL,
     is_active       BOOLEAN DEFAULT TRUE,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -418,7 +420,7 @@ erDiagram
     users {
         uuid id PK
         string email
-        string role "fleet_manager | dispatcher | driver | safety_officer | financial_analyst"
+        string role "admin | fleet_manager | dispatcher | driver | safety_officer | financial_analyst"
     }
     vehicles {
         uuid id PK
@@ -538,14 +540,18 @@ stateDiagram-v2
 
 ## 7. API Design
 
+> **Note:** The `admin` role has unrestricted access to every endpoint listed below. For brevity, tables show only the role-specific access. The admin account is configured via `.env` and serves as the system superuser.
+
 ### 7.1 Authentication
 
 | Method | Path               | Auth     | Role          | Description          |
 | ------ | ------------------ | -------- | ------------- | -------------------- |
 | POST   | `/api/auth/login`  | No       | —             | Login, returns JWT   |
-| POST   | `/api/auth/register` | Yes    | fleet_manager | Create new user      |
 | GET    | `/api/auth/me`     | Yes      | any           | Current user profile |
 | POST   | `/api/auth/refresh`| No       | —             | Refresh access token |
+| POST   | `/api/admin/users` | Yes      | admin         | Create new user with role |
+| GET    | `/api/admin/users` | Yes      | admin         | List all users       |
+| PATCH  | `/api/admin/users/{id}/role` | Yes | admin     | Change user role     |
 
 ### 7.2 Vehicles
 
@@ -708,22 +714,23 @@ sequenceDiagram
 
 ### 8.3 Role-Permission Matrix
 
-| Feature                                       | Fleet Manager | Dispatcher | Driver | Safety Officer | Financial Analyst |
-| --------------------------------------------- | :-----------: | :--------: | :----: | :------------: | :---------------: |
-| Vehicles (Add/Edit/Delete)                    | ✅            | ❌         | ❌     | ❌             | ❌                |
-| Vehicles (View)                               | ✅            | ✅         | ❌     | ❌             | ❌                |
-| Drivers (Add/Edit/Delete)                     | ✅            | ❌         | ❌     | ❌             | ❌                |
-| Drivers (View)                                | ✅            | ✅         | ❌     | ✅             | ❌                |
-| Drivers (Suspend/Unsuspend)                   | ❌            | ❌         | ❌     | ✅             | ❌                |
-| Drivers (License review / Safety score)       | ❌            | ❌         | ❌     | ✅             | ❌                |
-| Dashboard (View)                              | ✅            | ❌         | ❌     | ❌             | ❌                |
-| Trips (Create/Assign/Edit/Delete/Dispatch)    | ❌            | ✅         | ❌     | ❌             | ❌                |
-| Trips (View)                                  | ✅            | ✅         | ✅¹    | ❌             | ❌                |
-| Analytics (General view)                      | ✅            | ❌         | ❌     | ❌             | ❌                |
-| Analytics (Fuel cost / Op cost / Profit / ROI)| ❌            | ❌         | ❌     | ❌             | ✅                |
-| Analytics (Fuel Efficiency / Fleet Utilization)| ❌           | ❌         | ❌     | ❌             | ✅                |
-| CSV Export                                    | ❌            | ❌         | ❌     | ❌             | ✅                |
-| PDF Export                                    | ❌            | ❌         | ❌     | ❌             | ✅                |
+| Feature                                       | Admin | Fleet Manager | Dispatcher | Driver | Safety Officer | Financial Analyst |
+| --------------------------------------------- | :---: | :-----------: | :--------: | :----: | :------------: | :---------------: |
+| Vehicles (Add/Edit/Delete)                    | ✅    | ✅            | ❌         | ❌     | ❌             | ❌                |
+| Vehicles (View)                               | ✅    | ✅            | ✅         | ❌     | ❌             | ❌                |
+| Drivers (Add/Edit/Delete)                     | ✅    | ✅            | ❌         | ❌     | ❌             | ❌                |
+| Drivers (View)                                | ✅    | ✅            | ✅         | ❌     | ✅             | ❌                |
+| Drivers (Suspend/Unsuspend)                   | ✅    | ❌            | ❌         | ❌     | ✅             | ❌                |
+| Drivers (License review / Safety score)       | ✅    | ❌            | ❌         | ❌     | ✅             | ❌                |
+| Dashboard (View)                              | ✅    | ✅            | ❌         | ❌     | ❌             | ❌                |
+| Trips (Create/Assign/Edit/Delete/Dispatch)    | ✅    | ❌            | ✅         | ❌     | ❌             | ❌                |
+| Trips (View)                                  | ✅    | ✅            | ✅         | ✅¹    | ❌             | ❌                |
+| Analytics (General view)                      | ✅    | ✅            | ❌         | ❌     | ❌             | ❌                |
+| Analytics (Fuel cost / Op cost / Profit / ROI)| ✅    | ❌            | ❌         | ❌     | ❌             | ✅                |
+| Analytics (Fuel Efficiency / Fleet Utilization)| ✅   | ❌            | ❌         | ❌     | ❌             | ✅                |
+| CSV Export                                    | ✅    | ❌            | ❌         | ❌     | ❌             | ✅                |
+| PDF Export                                    | ✅    | ❌            | ❌         | ❌     | ❌             | ✅                |
+| User Management (create/edit roles)           | ✅    | ❌            | ❌         | ❌     | ❌             | ❌                |
 
 ¹ Driver views only their own assigned trips — vehicle allocated, source/destination, time/date, and profit earned.
 
@@ -742,12 +749,49 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
     return payload
 
+async def get_admin_user(current_user = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin access required")
+    return current_user
+
 def require_roles(*roles: str):
+    """Admin role automatically passes any role check."""
     async def role_checker(current_user = Depends(get_current_user)):
+        if current_user["role"] == "admin":
+            return current_user
         if current_user["role"] not in roles:
             raise HTTPException(status.HTTP_403_FORBIDDEN)
         return current_user
     return role_checker
+```
+
+### 8.5 Admin Account Seeding
+
+The initial admin account is configured via environment variables and seeded on application startup:
+
+```
+# .env
+ADMIN_EMAIL=admin@transitops.com
+ADMIN_PASSWORD=change-this-password
+ADMIN_NAME=System Admin
+```
+
+In the FastAPI lifespan handler, the application checks for an existing admin user and creates one if missing:
+
+```python
+# main.py lifespan
+async def seed_admin(db: AsyncSession):
+    admin = await db.execute(
+        select(User).where(User.role == "admin")
+    )
+    if not admin.scalar_one_or_none():
+        db.add(User(
+            email=settings.ADMIN_EMAIL,
+            password_hash=hash_password(settings.ADMIN_PASSWORD),
+            name=settings.ADMIN_NAME,
+            role="admin"
+        ))
+        await db.commit()
 ```
 
 ---
@@ -758,17 +802,18 @@ def require_roles(*roles: str):
 
 ```
 /login                          → LoginPage              [public]
-/dashboard                      → DashboardPage           [fleet_manager]
-/vehicles                       → VehiclesPage            [fleet_manager, dispatcher]
-/drivers                        → DriversPage             [fleet_manager, dispatcher, safety_officer]
-/trips                          → TripsPage               [fleet_manager, dispatcher]
-/trips/new                      → TripsPage (create)      [dispatcher]
-/trips/:id                      → TripsPage (detail)      [fleet_manager, dispatcher, driver]
+/dashboard                      → DashboardPage           [admin, fleet_manager]
+/vehicles                       → VehiclesPage            [admin, fleet_manager, dispatcher]
+/drivers                        → DriversPage             [admin, fleet_manager, dispatcher, safety_officer]
+/trips                          → TripsPage               [admin, fleet_manager, dispatcher]
+/trips/new                      → TripsPage (create)      [admin, dispatcher]
+/trips/:id                      → TripsPage (detail)      [admin, fleet_manager, dispatcher, driver]
 /my-trips                       → MyTripsPage             [driver]
-/maintenance                    → MaintenancePage         [fleet_manager, financial_analyst]
-/fuel-expenses                  → FuelExpensesPage        [fleet_manager, financial_analyst]
-/analytics                      → AnalyticsPage            [fleet_manager]
-/analytics/financial            → FinancialAnalyticsPage  [financial_analyst]
+/maintenance                    → MaintenancePage         [admin, fleet_manager, financial_analyst]
+/fuel-expenses                  → FuelExpensesPage        [admin, fleet_manager, financial_analyst]
+/analytics                      → AnalyticsPage            [admin, fleet_manager]
+/analytics/financial            → FinancialAnalyticsPage  [admin, financial_analyst]
+/admin/users                    → AdminUsersPage          [admin]
 ```
 
 ### 9.2 Component Tree
@@ -792,6 +837,7 @@ graph TD
     FEL["/fuel-expenses → FuelExpensesPage"]
     ANL["/analytics → AnalyticsPage"]
     FAN["/analytics/financial → FinancialAnalyticsPage"]
+    ADM["/admin/users → AdminUsersPage"]
     NF["* → NotFoundPage"]
 
     APP --> BR
@@ -809,6 +855,7 @@ graph TD
     ML --> FEL
     ML --> ANL
     ML --> FAN
+    ML --> ADM
 ```
 
 ### 9.3 Zustand Store Pattern
@@ -932,11 +979,12 @@ flowchart TD
 | Time | Task                                                         | Output                                          |
 | ---- | ------------------------------------------------------------ | ----------------------------------------------- |
 | 0:00 | Init backend: FastAPI project, config, database, alembic     | `/backend` scaffold, first migration            |
-| 0:20 | User model + migration                                       | `users` table                                   |
-| 0:30 | Auth endpoints (login, register, me, refresh)                | Working auth with JWT                           |
-| 1:00 | Init frontend: Vite + React + Tailwind + routing + Axios     | `/frontend` scaffold, login page                |
-| 1:15 | Auth store + ProtectedRoute + login integration              | Login flow end-to-end                           |
-| 1:30 | MainLayout + Sidebar + role-based nav                        | Navigation structure                            |
+| 0:20 | User model + migration                                       | `users` table (includes `admin` role)         |
+| 0:30 | Auth endpoints (login, me, refresh)                         | Working auth with JWT                         |
+| 0:45 | Admin seeding from `.env` + admin user endpoints             | Auto-create admin on startup, `/admin/users`  |
+| 1:00 | Init frontend: Vite + React + Tailwind + routing + Axios     | `/frontend` scaffold, login page              |
+| 1:15 | Auth store + ProtectedRoute + login integration              | Login flow end-to-end                         |
+| 1:30 | MainLayout + Sidebar + role-based nav                        | Navigation structure                          |
 
 ### Phase 2: Vehicles + Drivers (1.5h)
 
