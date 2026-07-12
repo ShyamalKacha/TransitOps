@@ -47,11 +47,11 @@ Logistics companies manage vehicles, drivers, trips, maintenance, and expenses u
 - **Analytics Dashboard** — KPIs, charts, CSV & PDF export
 
 **User Roles:**
-- **Fleet Manager** — manages vehicle and driver master data, oversees operations
-- **Dispatcher** — creates and manages trips, assigns vehicles and drivers
-- **Driver** — views assigned trips with route, vehicle, schedule, and earnings
-- **Safety Officer** — monitors driver licenses, safety scores, can suspend/unsuspend drivers
-- **Financial Analyst** — analyses costs, fuel efficiency, profit per trip, exports reports
+- **Fleet Manager** — Vehicle: Add/Edit/Delete/View. Driver: Add/Edit/Delete/View. Dashboard: View. Trip: View. Analytics: View.
+- **Dispatcher** — Create trip, assign vehicles to driver, edit/delete/view trips. See vehicle and driver details.
+- **Driver** — View only trips assigned to them: vehicle, source/destination, time/date, profit earned.
+- **Safety Officer** — Suspend/Unsuspend drivers. Decide license validity. Check driver records & eligibility. Monitor safety score.
+- **Financial Analyst** — View-only: fuel cost (from avg km/L), operational expenses, maintenance cost, profit per trip. Dashboard with Fuel Efficiency, Fleet Utilization, Operational Cost, Vehicle ROI. CSV & PDF export. Cannot add or edit anything.
 
 ### 1.3 Tech Stack
 
@@ -154,7 +154,7 @@ transitops/
 │   │   │   │   └── models.py          # FuelLog, Expense models
 │   │   │   └── analytics/
 │   │   │       ├── __init__.py
-│   │   │       ├── router.py          # GET /dashboard, /fuel-efficiency, /export/csv
+│   │   │       ├── router.py          # GET /dashboard, /fuel-efficiency, /fleet-utilization, /operational-cost, /vehicle-roi, /profit-per-trip, /fuel-cost, /driver-trips, /export/csv, /export/pdf
 │   │   │       ├── schemas.py         # DashboardResponse, etc.
 │   │   │       └── service.py         # Aggregation queries
 │   │   └── common/
@@ -225,6 +225,7 @@ transitops/
 │   │   │       ├── FleetUtilizationChart.tsx
 │   │   │       ├── FuelEfficiencyChart.tsx
 │   │   │       ├── CostBreakdownChart.tsx
+│   │   │       ├── ProfitPerTripChart.tsx
 │   │   │       └── ExportButton.tsx
 │   │   ├── pages/
 │   │   │   ├── LoginPage.tsx
@@ -235,8 +236,8 @@ transitops/
 │   │   │   ├── MyTripsPage.tsx               # Driver: own trips with profit
 │   │   │   ├── MaintenancePage.tsx
 │   │   │   ├── FuelExpensesPage.tsx
-│   │   │   ├── AnalyticsPage.tsx
 │   │   │   ├── FinancialAnalyticsPage.tsx    # Financial analyst dashboard
+│   │   │   ├── AnalyticsPage.tsx             # Fleet manager analytics
 │   │   │   └── NotFoundPage.tsx
 │   │   ├── types/
 │   │   │   └── index.ts              # Shared TypeScript interfaces
@@ -435,6 +436,14 @@ erDiagram
         uuid id PK
         uuid vehicle_id FK
         uuid driver_id FK
+        string source
+        string destination
+        decimal cargo_weight
+        decimal planned_distance
+        decimal actual_distance "nullable, set on completion"
+        decimal fuel_consumed "nullable, set on completion"
+        decimal revenue "trip earnings"
+        decimal driver_earnings "driver profit share"
         string status "draft | dispatched | completed | cancelled"
     }
     maintenance_records {
@@ -540,39 +549,41 @@ stateDiagram-v2
 
 ### 7.2 Vehicles
 
-| Method | Path                        | Auth | Role               | Description               |
-| ------ | --------------------------- | ---- | ------------------ | ------------------------- |
-| GET    | `/api/vehicles`             | Yes  | any                | List (filters: type, status, search) |
-| POST   | `/api/vehicles`             | Yes  | fleet_manager      | Create vehicle            |
-| GET    | `/api/vehicles/{id}`        | Yes  | any                | Get vehicle by ID         |
-| PUT    | `/api/vehicles/{id}`        | Yes  | fleet_manager      | Update vehicle            |
-| DELETE | `/api/vehicles/{id}`        | Yes  | fleet_manager      | Delete vehicle            |
-| PATCH  | `/api/vehicles/{id}/status` | Yes  | fleet_manager      | Change status (to retired) |
+| Method | Path                        | Auth | Role                          | Description               |
+| ------ | --------------------------- | ---- | ----------------------------- | ------------------------- |
+| GET    | `/api/vehicles`             | Yes  | fleet_manager, dispatcher     | List                      |
+| POST   | `/api/vehicles`             | Yes  | fleet_manager                 | Add vehicle               |
+| GET    | `/api/vehicles/{id}`        | Yes  | fleet_manager, dispatcher     | Get vehicle by ID         |
+| PUT    | `/api/vehicles/{id}`        | Yes  | fleet_manager                 | Edit vehicle              |
+| DELETE | `/api/vehicles/{id}`        | Yes  | fleet_manager                 | Delete vehicle            |
+| PATCH  | `/api/vehicles/{id}/status` | Yes  | fleet_manager                 | Change status             |
 
 ### 7.3 Drivers
 
-| Method | Path                            | Auth | Role                         | Description                         |
-| ------ | ------------------------------- | ---- | ---------------------------- | ----------------------------------- |
-| GET    | `/api/drivers`                  | Yes  | any                          | List (filters: status, license_expiry) |
-| POST   | `/api/drivers`                  | Yes  | fleet_manager                | Create driver                       |
-| GET    | `/api/drivers/{id}`             | Yes  | any                          | Get driver by ID                    |
-| PUT    | `/api/drivers/{id}`             | Yes  | fleet_manager                | Update driver                       |
-| DELETE | `/api/drivers/{id}`             | Yes  | fleet_manager                | Delete driver                       |
-| PATCH  | `/api/drivers/{id}/status`      | Yes  | fleet_manager, safety_officer | Suspend/unsuspend driver            |
-| PATCH  | `/api/drivers/{id}/safety-score`| Yes  | safety_officer               | Update safety score + license review |
+| Method | Path                            | Auth | Role                                  | Description                         |
+| ------ | ------------------------------- | ---- | ------------------------------------- | ----------------------------------- |
+| GET    | `/api/drivers`                  | Yes  | fleet_manager, dispatcher, safety_officer | List                            |
+| POST   | `/api/drivers`                  | Yes  | fleet_manager                         | Add driver                          |
+| GET    | `/api/drivers/{id}`             | Yes  | fleet_manager, dispatcher, safety_officer | Get driver by ID                 |
+| PUT    | `/api/drivers/{id}`             | Yes  | fleet_manager                         | Edit driver                         |
+| DELETE | `/api/drivers/{id}`             | Yes  | fleet_manager                         | Delete driver                       |
+| PATCH  | `/api/drivers/{id}/status`      | Yes  | safety_officer                        | Suspend/unsuspend driver            |
+| PATCH  | `/api/drivers/{id}/safety-score`| Yes  | safety_officer                        | Update safety score + license review |
 
 ### 7.4 Trips
 
-| Method | Path                          | Auth | Role                       | Description                          |
-| ------ | ----------------------------- | ---- | -------------------------- | ------------------------------------ |
-| GET    | `/api/trips`                  | Yes  | any                        | List (driver sees only own trips)    |
-| POST   | `/api/trips`                  | Yes  | dispatcher                 | Create draft trip                    |
-| GET    | `/api/trips/{id}`             | Yes  | any                        | Get trip detail (driver: own only)   |
-| PUT    | `/api/trips/{id}`             | Yes  | dispatcher                 | Update draft trip                    |
-| DELETE | `/api/trips/{id}`             | Yes  | dispatcher                 | Delete draft trip                    |
-| PATCH  | `/api/trips/{id}/dispatch`    | Yes  | dispatcher                 | Dispatch (assigns vehicle + driver)  |
-| PATCH  | `/api/trips/{id}/complete`    | Yes  | dispatcher, driver         | Complete (odometer, fuel, revenue)   |
-| PATCH  | `/api/trips/{id}/cancel`      | Yes  | dispatcher                 | Cancel trip                          |
+| Method | Path                          | Auth | Role                          | Description                          |
+| ------ | ----------------------------- | ---- | ----------------------------- | ------------------------------------ |
+| GET    | `/api/trips`                  | Yes  | fleet_manager, dispatcher     | List all trips                      |
+| POST   | `/api/trips`                  | Yes  | dispatcher                    | Create trip                          |
+| GET    | `/api/trips/{id}`             | Yes  | fleet_manager, dispatcher, driver¹ | Get trip detail                  |
+| PUT    | `/api/trips/{id}`             | Yes  | dispatcher                    | Edit trip                            |
+| DELETE | `/api/trips/{id}`             | Yes  | dispatcher                    | Delete trip                          |
+| PATCH  | `/api/trips/{id}/dispatch`    | Yes  | dispatcher                    | Dispatch (assign vehicle + driver)   |
+| PATCH  | `/api/trips/{id}/complete`    | Yes  | dispatcher                    | Complete trip                        |
+| PATCH  | `/api/trips/{id}/cancel`      | Yes  | dispatcher                    | Cancel trip                          |
+
+¹ Driver sees only their own trip details — vehicle, destination, time/date, and profit earned.
 
 **Request/Response Examples:**
 
@@ -589,37 +600,37 @@ Body: { "final_odometer": 15250.5, "fuel_consumed": 45.2 }
 
 ### 7.5 Maintenance
 
-| Method | Path                              | Auth | Role          | Description                       |
-| ------ | --------------------------------- | ---- | ------------- | --------------------------------- |
-| GET    | `/api/maintenance`               | Yes  | any           | List (filters: vehicle, status, date) |
-| POST   | `/api/maintenance`               | Yes  | fleet_manager | Create (auto flips vehicle to In Shop) |
-| GET    | `/api/maintenance/{id}`          | Yes  | any           | Get maintenance record            |
-| PUT    | `/api/maintenance/{id}`          | Yes  | fleet_manager | Update maintenance record         |
-| PATCH  | `/api/maintenance/{id}/close`    | Yes  | fleet_manager | Close (restores vehicle to Available) |
+| Method | Path                           | Auth | Role                                | Description                       |
+| ------ | ------------------------------ | ---- | ----------------------------------- | --------------------------------- |
+| GET    | `/api/maintenance`             | Yes  | fleet_manager, financial_analyst    | List                              |
+| POST   | `/api/maintenance`             | Yes  | fleet_manager                       | Create (auto flips vehicle to In Shop) |
+| GET    | `/api/maintenance/{id}`        | Yes  | fleet_manager, financial_analyst    | Get maintenance record            |
+| PUT    | `/api/maintenance/{id}`        | Yes  | fleet_manager                       | Update maintenance record         |
+| PATCH  | `/api/maintenance/{id}/close`  | Yes  | fleet_manager                       | Close (restores vehicle to Available) |
 
 ### 7.6 Fuel & Expenses
 
 | Method | Path                 | Auth | Role                      | Description            |
 | ------ | -------------------- | ---- | ------------------------- | ---------------------- |
-| GET    | `/api/fuel-logs`     | Yes  | any                       | List (filters: vehicle, date) |
-| POST   | `/api/fuel-logs`     | Yes  | dispatcher, driver        | Create fuel log        |
-| GET    | `/api/expenses`      | Yes  | any                       | List (filters: vehicle, type, date) |
+| GET    | `/api/fuel-logs`     | Yes  | financial_analyst         | List fuel logs         |
+| POST   | `/api/fuel-logs`     | Yes  | fleet_manager             | Create fuel log        |
+| GET    | `/api/expenses`      | Yes  | financial_analyst         | List expenses          |
 | POST   | `/api/expenses`      | Yes  | fleet_manager             | Create expense         |
 
 ### 7.7 Analytics
 
 | Method | Path                                  | Auth | Role               | Description                                |
 | ------ | ------------------------------------- | ---- | ------------------ | ------------------------------------------ |
-| GET    | `/api/analytics/dashboard`            | Yes  | any                | KPI summary (all users see KPI cards)      |
-| GET    | `/api/analytics/fuel-efficiency`      | Yes  | any                | Fuel efficiency (km/L) by vehicle          |
-| GET    | `/api/analytics/fleet-utilization`    | Yes  | any                | Utilization percentage                     |
-| GET    | `/api/analytics/operational-cost`     | Yes  | financial_analyst  | Cost breakdown (fuel + maintenance + toll) |
-| GET    | `/api/analytics/vehicle-roi`          | Yes  | financial_analyst  | ROI per vehicle                            |
+| GET    | `/api/analytics/dashboard`            | Yes  | fleet_manager      | KPI dashboard summary                      |
+| GET    | `/api/analytics/fuel-efficiency`      | Yes  | financial_analyst  | Fuel efficiency (km/L) by vehicle          |
+| GET    | `/api/analytics/fleet-utilization`    | Yes  | financial_analyst  | Fleet utilization percentage               |
+| GET    | `/api/analytics/operational-cost`     | Yes  | financial_analyst  | Operational cost breakdown                 |
+| GET    | `/api/analytics/vehicle-roi`          | Yes  | financial_analyst  | Vehicle ROI                                |
 | GET    | `/api/analytics/profit-per-trip`      | Yes  | financial_analyst  | Profit per trip (revenue - costs)          |
 | GET    | `/api/analytics/fuel-cost`            | Yes  | financial_analyst  | Fuel cost analysis (avg km/L, cost/km)     |
-| GET    | `/api/analytics/driver-trips`         | Yes  | driver             | Own trips with vehicle, route, profit      |
-| GET    | `/api/analytics/export/csv`           | Yes  | any                | CSV export of filtered data                |
-| GET    | `/api/analytics/export/pdf`           | Yes  | financial_analyst  | PDF report (full analytics)                |
+| GET    | `/api/analytics/driver-trips`         | Yes  | driver             | Own trips with vehicle, route, earnings    |
+| GET    | `/api/analytics/export/csv`           | Yes  | financial_analyst  | CSV export                                 |
+| GET    | `/api/analytics/export/pdf`           | Yes  | financial_analyst  | PDF report                                 |
 
 ### 7.8 API Response Envelope
 
@@ -697,39 +708,24 @@ sequenceDiagram
 
 ### 8.3 Role-Permission Matrix
 
-| Feature                          | Fleet Manager | Dispatcher | Driver  | Safety Officer | Financial Analyst |
-| -------------------------------- | :-----------: | :--------: | :-----: | :------------: | :---------------: |
-| Dashboard (view)                 | ✅            | ✅         | ✅      | ✅             | ✅                |
-| Vehicles (view)                  | ✅            | ✅         | ✅      | ✅             | ✅                |
-| Vehicles (create/edit/delete)    | ✅            | ❌         | ❌      | ❌             | ❌                |
-| Vehicles (status change)         | ✅            | ❌         | ❌      | ❌             | ❌                |
-| Drivers (view)                   | ✅            | ✅         | ✅      | ✅             | ✅                |
-| Drivers (create/edit/delete)     | ✅            | ❌         | ❌      | ❌             | ❌                |
-| Drivers (suspend/unsuspend)      | ✅            | ❌         | ❌      | ✅             | ❌                |
-| Drivers (license review)         | ❌            | ❌         | ❌      | ✅             | ❌                |
-| Drivers (safety score update)    | ❌            | ❌         | ❌      | ✅             | ❌                |
-| Trips (view all)                 | ✅            | ✅         | ❌¹     | ✅             | ✅                |
-| Trips (create)                   | ❌            | ✅         | ❌      | ❌             | ❌                |
-| Trips (edit/delete)              | ❌            | ✅         | ❌      | ❌             | ❌                |
-| Trips (dispatch)                 | ❌            | ✅         | ❌      | ❌             | ❌                |
-| Trips (complete)                 | ❌            | ✅         | ✅²     | ❌             | ❌                |
-| Trips (cancel)                   | ❌            | ✅         | ❌      | ❌             | ❌                |
-| Maintenance (view)               | ✅            | ✅         | ✅      | ✅             | ✅                |
-| Maintenance (create/close)       | ✅            | ❌         | ❌      | ❌             | ❌                |
-| Fuel Logs (create)               | ❌            | ✅         | ✅      | ❌             | ❌                |
-| Expenses (create)                | ✅            | ❌         | ❌      | ❌             | ❌                |
-| Analytics (KPIs)                 | ✅            | ✅         | ✅      | ✅             | ✅                |
-| Analytics (fuel efficiency)      | ✅            | ❌         | ❌      | ✅             | ✅                |
-| Analytics (operational cost)     | ❌            | ❌         | ❌      | ❌             | ✅                |
-| Analytics (profit per trip)      | ❌            | ❌         | ❌      | ❌             | ✅                |
-| Analytics (vehicle ROI)          | ❌            | ❌         | ❌      | ❌             | ✅                |
-| Analytics (fuel cost analysis)   | ❌            | ❌         | ❌      | ❌             | ✅                |
-| CSV Export                       | ✅            | ✅         | ✅      | ✅             | ✅                |
-| PDF Export                      | ❌            | ❌         | ❌      | ❌             | ✅                |
-| User Management                  | ✅            | ❌         | ❌      | ❌             | ❌                |
+| Feature                                       | Fleet Manager | Dispatcher | Driver | Safety Officer | Financial Analyst |
+| --------------------------------------------- | :-----------: | :--------: | :----: | :------------: | :---------------: |
+| Vehicles (Add/Edit/Delete)                    | ✅            | ❌         | ❌     | ❌             | ❌                |
+| Vehicles (View)                               | ✅            | ✅         | ❌     | ❌             | ❌                |
+| Drivers (Add/Edit/Delete)                     | ✅            | ❌         | ❌     | ❌             | ❌                |
+| Drivers (View)                                | ✅            | ✅         | ❌     | ✅             | ❌                |
+| Drivers (Suspend/Unsuspend)                   | ❌            | ❌         | ❌     | ✅             | ❌                |
+| Drivers (License review / Safety score)       | ❌            | ❌         | ❌     | ✅             | ❌                |
+| Dashboard (View)                              | ✅            | ❌         | ❌     | ❌             | ❌                |
+| Trips (Create/Assign/Edit/Delete/Dispatch)    | ❌            | ✅         | ❌     | ❌             | ❌                |
+| Trips (View)                                  | ✅            | ✅         | ✅¹    | ❌             | ❌                |
+| Analytics (General view)                      | ✅            | ❌         | ❌     | ❌             | ❌                |
+| Analytics (Fuel cost / Op cost / Profit / ROI)| ❌            | ❌         | ❌     | ❌             | ✅                |
+| Analytics (Fuel Efficiency / Fleet Utilization)| ❌           | ❌         | ❌     | ❌             | ✅                |
+| CSV Export                                    | ❌            | ❌         | ❌     | ❌             | ✅                |
+| PDF Export                                    | ❌            | ❌         | ❌     | ❌             | ✅                |
 
-¹ Driver sees only their own trips with vehicle details, route, schedule, and earnings.
-² Driver can complete their own trips (odometer, fuel consumed, revenue).
+¹ Driver views only their own assigned trips — vehicle allocated, source/destination, time/date, and profit earned.
 
 ### 8.4 RBAC Implementation
 
@@ -762,22 +758,17 @@ def require_roles(*roles: str):
 
 ```
 /login                          → LoginPage              [public]
-/                               → redirect /dashboard
-/dashboard                      → DashboardPage           [auth]
-/vehicles                       → VehiclesPage            [fleet_manager, dispatcher, safety_officer]
-/vehicles/new                   → VehiclesPage (modal)    [fleet_manager]
+/dashboard                      → DashboardPage           [fleet_manager]
+/vehicles                       → VehiclesPage            [fleet_manager, dispatcher]
 /drivers                        → DriversPage             [fleet_manager, dispatcher, safety_officer]
-/drivers/new                    → DriversPage (modal)     [fleet_manager]
-/trips                          → TripsPage               [fleet_manager, dispatcher, safety_officer, financial_analyst]
-/trips/new                      → TripsPage (wizard)      [dispatcher]
-/trips/:id                      → TripsPage (detail)      [dispatcher, driver, fleet_manager]
+/trips                          → TripsPage               [fleet_manager, dispatcher]
+/trips/new                      → TripsPage (create)      [dispatcher]
+/trips/:id                      → TripsPage (detail)      [fleet_manager, dispatcher, driver]
 /my-trips                       → MyTripsPage             [driver]
-/maintenance                    → MaintenancePage         [fleet_manager, dispatcher, safety_officer]
-/maintenance/new                → MaintenancePage (modal) [fleet_manager]
-/fuel-expenses                  → FuelExpensesPage        [all]
-/analytics                      → AnalyticsPage           [financial_analyst, fleet_manager, safety_officer]
-/analytics/fleet                → FleetAnalytics          [fleet_manager, safety_officer]
-/analytics/financial            → FinancialAnalytics      [financial_analyst]
+/maintenance                    → MaintenancePage         [fleet_manager, financial_analyst]
+/fuel-expenses                  → FuelExpensesPage        [fleet_manager, financial_analyst]
+/analytics                      → AnalyticsPage            [fleet_manager]
+/analytics/financial            → FinancialAnalyticsPage  [financial_analyst]
 ```
 
 ### 9.2 Component Tree
@@ -850,16 +841,14 @@ interface VehicleStore {
 
 ### 9.5 Analytics Charts (Recharts)
 
-| Chart                          | Type             | Data Source                               | Role Access                    |
-| ------------------------------ | ---------------- | ----------------------------------------- | ------------------------------ |
-| Fleet Utilization              | Pie / Donut      | Vehicle status counts                     | All                            |
-| Fuel Efficiency                | Bar              | Distance / Fuel per vehicle               | All                            |
-| Operational Cost               | Line (time)      | Monthly maintenance + fuel costs          | Financial Analyst              |
-| Vehicle ROI                    | Horizontal Bar   | (Revenue - Cost) / Acquisition            | Financial Analyst              |
-| Active Trips Over Time         | Line             | Trips by date                             | All                            |
-| Profit Per Trip                | Bar              | Revenue - (fuel + maintenance + expenses) | Financial Analyst              |
-| Fuel Cost Analysis             | Combo            | Avg km/L, cost/km per vehicle             | Financial Analyst              |
-| Driver Trip Earnings           | Table            | Driver trips with revenue & earnings      | Driver                         |
+| Chart                          | Type             | Data Source                               | Role               |
+| ------------------------------ | ---------------- | ----------------------------------------- | ------------------ |
+| Fleet Utilization              | Pie / Donut      | Vehicle status counts                     | Financial Analyst  |
+| Fuel Efficiency                | Bar              | Distance / Fuel per vehicle               | Financial Analyst  |
+| Operational Cost               | Line (time)      | Monthly maintenance + fuel costs          | Financial Analyst  |
+| Vehicle ROI                    | Horizontal Bar   | (Revenue - Cost) / Acquisition            | Financial Analyst  |
+| Profit Per Trip                | Bar              | Revenue - (fuel + maintenance + expenses) | Financial Analyst  |
+| Fuel Cost Analysis             | Combo            | Avg km/L, cost/km per vehicle             | Financial Analyst  |
 
 ---
 
@@ -869,7 +858,7 @@ interface VehicleStore {
 
 ```mermaid
 flowchart TD
-    A["User clicks 'Dispatch'"] --> B
+    A["Dispatcher clicks 'Dispatch'"] --> B
     subgraph B["Frontend"]
         B1["PATCH /api/trips/{id}/dispatch"]
     end
@@ -953,54 +942,52 @@ flowchart TD
 
 | Time | Task                                                         | Output                                          |
 | ---- | ------------------------------------------------------------ | ----------------------------------------------- |
-| 1:30 | Vehicle model + CRUD API                                     | `/api/vehicles` endpoints                       |
-| 1:50 | Vehicle list page + filters + create/edit modal              | Vehicle management UI                           |
-| 2:10 | Driver model + CRUD API                                      | `/api/drivers` endpoints                        |
-| 2:30 | Driver list page + filters + create/edit modal               | Driver management UI                            |
-| 3:00 | Status management endpoints (PATCH status for both)          | Manual status transitions                       |
+| 1:30 | Vehicle model + CRUD API                                     | `/api/vehicles` endpoints (fleet_manager)       |
+| 1:50 | Vehicle list page + create/edit modal                        | Vehicle management UI (fleet_manager)           |
+| 2:10 | Driver model + CRUD API                                      | `/api/drivers` endpoints (fleet_manager)        |
+| 2:30 | Driver list page + create/edit modal                         | Driver management UI (fleet_manager)            |
+| 3:00 | Driver suspend + safety score endpoints                      | `/api/drivers/{id}/status + safety-score` (safety_officer) |
 
 ### Phase 3: Trips (1.5h)
 
 | Time | Task                                                         | Output                                          |
 | ---- | ------------------------------------------------------------ | ----------------------------------------------- |
-| 3:00 | Trip model + migration                                       | `trips` table                                   |
-| 3:15 | Trip CRUD API (create draft)                                 | `/api/trips` basic endpoints                    |
-| 3:30 | TripService: dispatch with all business rules                | `/api/trips/{id}/dispatch`                     |
-| 3:45 | TripService: complete (odometer + fuel) + cancel             | `/api/trips/{id}/complete`, `/cancel`           |
-| 4:00 | Trip list page with filters + status badges                  | Trip management UI                              |
-| 4:15 | Trip creation form (select available vehicles/drivers)       | Trip create form                                |
-| 4:30 | Dispatch/Complete/Cancel buttons with confirm dialogs        | Trip action flow                                |
+| 3:00 | Trip model + migration (add revenue, driver_earnings fields) | `trips` table                                   |
+| 3:15 | Trip CRUD API (create draft)                                 | `/api/trips` endpoints (dispatcher)             |
+| 3:30 | TripService: dispatch with all business rules                | `/api/trips/{id}/dispatch` (dispatcher)         |
+| 3:45 | TripService: complete (odometer, fuel, revenue) + cancel     | `/api/trips/{id}/complete + /cancel` (dispatcher) |
+| 4:00 | Trip list + detail page with status badges                   | Trip management UI (fleet_manager, dispatcher)  |
+| 4:15 | Trip creation form + vehicle/driver assignment               | Trip create form (dispatcher)                   |
+| 4:30 | MyTripsPage: driver's own trips with vehicle, route, earnings| Driver trip view (driver)                       |
 
 ### Phase 4: Maintenance + Fuel/Expenses (1.5h)
 
 | Time | Task                                                         | Output                                          |
 | ---- | ------------------------------------------------------------ | ----------------------------------------------- |
 | 4:30 | Maintenance model + migration                                | `maintenance_records` table                     |
-| 4:45 | Maintenance API (create → auto InShop, close → restore)      | `/api/maintenance` endpoints                    |
+| 4:45 | Maintenance API (create → auto InShop, close → restore)      | `/api/maintenance` endpoints (fleet_manager)    |
 | 5:00 | Maintenance UI (list, create modal, close action)            | Maintenance management UI                       |
 | 5:15 | FuelLog model + migration + API                              | fuel logging endpoints                          |
 | 5:30 | Expense model + migration + API                              | expense tracking endpoints                      |
-| 5:45 | Fuel/Expense UI (list pages, create forms)                   | Fuel & expense management UI                    |
-| 6:00 | Compute operational cost endpoint                            | `GET /api/analytics/operational-cost`           |
+| 5:45 | Fuel/Expense list pages                                      | View-only pages (financial_analyst)             |
 
-### Phase 5: Dashboard + Analytics (1h)
-
-| Time | Task                                                         | Output                                          |
-| ---- | ------------------------------------------------------------ | ----------------------------------------------- |
-| 6:00 | Dashboard aggregation endpoint                               | `GET /api/analytics/dashboard`                 |
-| 6:15 | KPI cards component + dashboard page                         | Live KPI dashboard                              |
-| 6:30 | Fuel efficiency + fleet utilization chart endpoints          | Chart data APIs                                 |
-| 6:45 | Recharts integration: UtilizationPie + FuelBar + CostLine    | Interactive charts                              |
-| 7:00 | Vehicle ROI calculation + CSV export                          | ROI view + download button                      |
-
-### Phase 6: Polish + Bonus Features (1h)
+### Phase 5: Dashboard + Analytics (1.5h)
 
 | Time | Task                                                         | Output                                          |
 | ---- | ------------------------------------------------------------ | ----------------------------------------------- |
-| 7:00 | Dark mode toggle                                              | Theme switching                                 |
-| 7:15 | Search/filter/sort polish on all list pages                   | Consistent UX                                   |
-| 7:30 | CSV export functionality (all entities)                       | Download reports                                |
-| 7:45 | Error handling polish (toast notifications, form validation)  | Production-quality UX                           |
+| 6:00 | Dashboard aggregation endpoint                               | `GET /api/analytics/dashboard` (fleet_manager)  |
+| 6:15 | KPI cards + dashboard page                                   | Live KPI dashboard                              |
+| 6:30 | Fuel efficiency + fleet utilization + fuel cost endpoints    | Chart data APIs (financial_analyst)             |
+| 6:45 | Profit-per-trip + vehicle ROI endpoints                      | Financial analytics APIs                        |
+| 7:00 | FinancialAnalyticsPage with Recharts integration             | Full financial dashboard                        |
+| 7:15 | CSV + PDF export endpoints                                   | Download reports (financial_analyst)            |
+
+### Phase 6: Polish (0.5h)
+
+| Time | Task                                                         | Output                                          |
+| ---- | ------------------------------------------------------------ | ----------------------------------------------- |
+| 7:30 | Dark mode toggle + role-based sidebar nav                    | Theme switching, nav filtering                  |
+| 7:45 | Error handling + form validation + toast notifications       | Production-quality UX                           |
 | 8:00 | Final testing + README                                        | Ship                                             |
 
 ---
@@ -1038,7 +1025,6 @@ These are identified improvements beyond the 8-hour scope:
 
 - **Email reminders** — Background task (APScheduler) to check expiring licenses daily and send notifications via SMTP
 - **Document management** — S3/MinIO file upload for vehicle documents (insurance, registration)
-- **PDF export** — Reportlab or WeasyPrint for formatted PDF reports
 - **WebSocket real-time updates** — Push status changes to connected clients when another user dispatches/completes trips
 - **Audit log** — `audit_logs` table tracking all status changes (who changed what and when)
 - **Soft delete** — Add `deleted_at` to vehicles/drivers instead of hard delete
