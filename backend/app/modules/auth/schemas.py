@@ -33,3 +33,9 @@ class UserCreate(BaseModel):
 
 class UserRoleUpdate(BaseModel):
     role: str
+
+
+class UserUpdate(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    password: str | None = None

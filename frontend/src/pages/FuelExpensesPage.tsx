@@ -82,25 +82,43 @@ export function FuelExpensesPage() {
       <Modal open={showFuelModal} onClose={() => setShowFuelModal(false)} title="Add Fuel Log">
         <div className="space-y-3">
           <Select id="fv" label="Vehicle" value={fuelForm.vehicle_id} onChange={(e) => setFuelForm({ ...fuelForm, vehicle_id: e.target.value })}
-            options={vehicles.map((v) => ({ value: v.id, label: v.name }))} />
-          <Input id="fl" label="Liters" type="number" value={fuelForm.liters} onChange={(e) => setFuelForm({ ...fuelForm, liters: Number(e.target.value) })} />
-          <Input id="fcpl" label="Cost per Liter" type="number" value={fuelForm.cost_per_liter} onChange={(e) => setFuelForm({ ...fuelForm, cost_per_liter: Number(e.target.value) })} />
+            options={vehicles.map((v) => ({ value: v.id, label: v.name }))} showAllOption={false} />
+          <Input id="fl" label="Liters" type="number" step="0.01" value={fuelForm.liters} onChange={(e) => setFuelForm({ ...fuelForm, liters: Number(e.target.value) })} />
+          <Input id="fcpl" label="Cost per Liter" type="number" step="0.01" value={fuelForm.cost_per_liter} onChange={(e) => setFuelForm({ ...fuelForm, cost_per_liter: Number(e.target.value) })} />
           <Input id="fd" label="Date" type="date" value={fuelForm.date} onChange={(e) => setFuelForm({ ...fuelForm, date: e.target.value })} />
           <Input id="fn" label="Notes" value={fuelForm.notes} onChange={(e) => setFuelForm({ ...fuelForm, notes: e.target.value })} />
-          <Button className="w-full" onClick={async () => { await createFuelLog(fuelForm); setShowFuelModal(false); fetchFuelLogs(); }}>Create</Button>
+          <Button className="w-full" onClick={async () => {
+            try {
+              await createFuelLog(fuelForm);
+              setShowFuelModal(false);
+              setFuelForm({ vehicle_id: '', liters: 0, cost_per_liter: 0, date: '', notes: '' });
+              fetchFuelLogs();
+            } catch (e: any) {
+              alert(e?.response?.data?.detail || 'Failed to create fuel log');
+            }
+          }}>Create</Button>
         </div>
       </Modal>
 
       <Modal open={showExpenseModal} onClose={() => setShowExpenseModal(false)} title="Add Expense">
         <div className="space-y-3">
           <Select id="ev" label="Vehicle" value={expenseForm.vehicle_id} onChange={(e) => setExpenseForm({ ...expenseForm, vehicle_id: e.target.value })}
-            options={vehicles.map((v) => ({ value: v.id, label: v.name }))} />
+            options={vehicles.map((v) => ({ value: v.id, label: v.name }))} showAllOption={false} />
           <Select id="et" label="Type" value={expenseForm.type} onChange={(e) => setExpenseForm({ ...expenseForm, type: e.target.value as any })}
             options={[{ value: 'toll', label: 'Toll' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'other', label: 'Other' }]} />
-          <Input id="ea" label="Amount" type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: Number(e.target.value) })} />
+          <Input id="ea" label="Amount" type="number" step="0.01" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: Number(e.target.value) })} />
           <Input id="ed" label="Description" value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} />
           <Input id="edate" label="Date" type="date" value={expenseForm.date} onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })} />
-          <Button className="w-full" onClick={async () => { await createExpense(expenseForm); setShowExpenseModal(false); fetchExpenses(); }}>Create</Button>
+          <Button className="w-full" onClick={async () => {
+            try {
+              await createExpense(expenseForm);
+              setShowExpenseModal(false);
+              setExpenseForm({ vehicle_id: '', type: 'other', amount: 0, description: '', date: '' });
+              fetchExpenses();
+            } catch (e: any) {
+              alert(e?.response?.data?.detail || 'Failed to create expense');
+            }
+          }}>Create</Button>
         </div>
       </Modal>
     </div>

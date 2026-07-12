@@ -67,6 +67,12 @@ export function AdminUsersPage() {
   // ---- Delete state ----
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // ---- Edit User modal ----
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', password: '' });
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState('');
+
   // ---- Auth guard ----
   useEffect(() => {
     if (!authLoading && (!authUser || authUser.role !== 'admin')) {
@@ -127,6 +133,32 @@ export function AdminUsersPage() {
     setRoleError('');
   };
 
+  // ---- Edit User handlers ----
+  const openEditModal = (u: AdminUser) => {
+    setEditUser(u);
+    setEditForm({ name: u.name, email: u.email, password: '' });
+    setEditError('');
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editUser) return;
+    if (!editForm.name || !editForm.email) {
+      setEditError('Name and email are required');
+      return;
+    }
+    setEditSubmitting(true);
+    setEditError('');
+    try {
+      await api.patch(`/admin/users/${editUser.id}`, editForm);
+      setEditUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      setEditError(err?.response?.data?.message || 'Failed to update user');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   const handleRoleSubmit = async () => {
     if (!roleUser || !newRole) return;
     setRoleSubmitting(true);
@@ -176,10 +208,20 @@ export function AdminUsersPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
+              openEditModal(u);
+            }}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
               openRoleModal(u);
             }}
           >
-            Change Role
+            Role
           </Button>
           <Button
             variant="ghost"
@@ -266,6 +308,7 @@ export function AdminUsersPage() {
             label="Role"
             options={ROLE_OPTIONS}
             value={addForm.role}
+            showAllOption={false}
             onChange={(e) => setAddForm({ ...addForm, role: e.target.value as UserRole })}
           />
           {addError && <p className="text-sm text-red-600">{addError}</p>}
@@ -299,6 +342,7 @@ export function AdminUsersPage() {
               label="New Role"
               options={ROLE_OPTIONS}
               value={newRole}
+              showAllOption={false}
               onChange={(e) => setNewRole(e.target.value as UserRole)}
             />
             {roleError && <p className="text-sm text-red-600">{roleError}</p>}
@@ -308,6 +352,24 @@ export function AdminUsersPage() {
               </Button>
               <Button onClick={handleRoleSubmit} disabled={roleSubmitting}>
                 {roleSubmitting ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit User Modal */}
+      <Modal open={!!editUser} onClose={() => setEditUser(null)} title={`Edit User — ${editUser?.name || ''}`}>
+        {editUser && (
+          <div className="space-y-4">
+            <Input id="edit-name" label="Name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+            <Input id="edit-email" label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} required />
+            <Input id="edit-password" label="New Password (leave blank to keep current)" type="password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} />
+            {editError && <p className="text-sm text-red-600">{editError}</p>}
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="secondary" onClick={() => setEditUser(null)}>Cancel</Button>
+              <Button onClick={handleEditSubmit} disabled={editSubmitting}>
+                {editSubmitting ? 'Saving...' : 'Save'}
               </Button>
             </div>
           </div>

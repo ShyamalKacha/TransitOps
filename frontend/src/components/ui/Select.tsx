@@ -3,9 +3,10 @@ import { cn } from '../../utils/cn';
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   options: { value: string; label: string }[];
+  showAllOption?: boolean;
 }
 
-export function Select({ className, label, options, id, ...props }: SelectProps) {
+export function Select({ className, label, options, id, showAllOption = true, ...props }: SelectProps) {
   return (
     <div>
       {label && <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>}
@@ -17,7 +18,7 @@ export function Select({ className, label, options, id, ...props }: SelectProps)
         )}
         {...props}
       >
-        <option value="">All</option>
+        {showAllOption && <option value="">All</option>}
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
