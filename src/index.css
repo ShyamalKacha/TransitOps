@@ -1,0 +1,289 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── Light Mode Theme (Default) ─── */
+:root {
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-raised: #f1f5f9;
+  --border: #cbd5e1;
+  --border-subtle: #e2e8f0;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+
+  --accent: #06B6D4;
+  --accent-hover: #0891B2;
+  --accent-dim: rgba(6, 182, 212, 0.08);
+
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --gray: #64748B;
+}
+
+/* ─── Dark Mode Theme ─── */
+[data-theme='dark'] {
+  --bg-base: #0F172A;
+  --bg-surface: #1E293B;
+  --bg-sidebar: #111827;
+  --bg-raised: #1A2235;
+  --border: #334155;
+  --border-subtle: #1E293B;
+
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+
+  --accent: #06B6D4;
+  --accent-hover: #0891B2;
+  --accent-dim: rgba(6, 182, 212, 0.15);
+
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --gray: #64748B;
+}
+
+html, body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#root { min-height: 100vh; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-raised); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.3s ease-out forwards; }
+
+/* Combined Truck Logo & Text Reveal Animation */
+@keyframes truckDriveAndReveal {
+  0% {
+    transform: translateX(-160px);
+    opacity: 0;
+  }
+  40% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes textReveal {
+  0% {
+    width: 0px;
+    opacity: 0;
+  }
+  35% {
+    width: 0px;
+    opacity: 0;
+  }
+  65% {
+    width: 140px;
+    opacity: 1;
+  }
+  100% {
+    width: 140px;
+    opacity: 1;
+  }
+}
+
+.animate-logo-truck {
+  animation: truckDriveAndReveal 1.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.animate-logo-text {
+  overflow: hidden;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+  animation: textReveal 1.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes floatOrb {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-15px) scale(1.05); }
+}
+.animate-float-orb {
+  animation: floatOrb 8s ease-in-out infinite;
+}
+
+/* ─── Login Page Brand Animation (Truck In + Name Reveal) ──────────────────── */
+@keyframes brandTruckBounce {
+  0% { transform: translateX(-180px); opacity: 0; }
+  45% { transform: translateX(8px);   opacity: 1; }
+  65% { transform: translateX(-3px);  }
+  80% { transform: translateX(1px);   }
+  100% { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes brandNameReveal {
+  0%   { clip-path: inset(0 100% 0 0); opacity: 0; }
+  40%  { clip-path: inset(0 100% 0 0); opacity: 0; }
+  70%  { clip-path: inset(0 0% 0 0);   opacity: 1; }
+  100% { clip-path: inset(0 0% 0 0);   opacity: 1; }
+}
+
+@keyframes brandSubtitleFade {
+  0%   { opacity: 0; transform: translateY(6px); }
+  55%  { opacity: 0; transform: translateY(6px); }
+  80%  { opacity: 1; transform: translateY(0);   }
+  100% { opacity: 1; transform: translateY(0);   }
+}
+
+.animate-brand-truck {
+  animation: brandTruckBounce 1.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-brand-name {
+  clip-path: inset(0 100% 0 0);
+  animation: brandNameReveal 1.5s ease-out forwards;
+}
+
+.animate-brand-subtitle {
+  animation: brandSubtitleFade 1.5s ease-out forwards;
+}
+
+/* ─── Cards ──────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-outline {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.btn-outline:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+  background: var(--bg-raised);
+}
+
+/* ─── Inputs ──────────────────────────────────────────────────────────────── */
+.input-field {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input-field::placeholder { color: var(--text-muted); }
+.input-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.18);
+}
+
+/* ─── Status badges ───────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.badge-available { background: rgba(34,197,94,0.12);  color: #22C55E; }
+.badge-on-trip   { background: rgba(245,158,11,0.12); color: #F59E0B; }
+.badge-in-shop   { background: rgba(249,115,22,0.12); color: #F97316; }
+.badge-retired   { background: rgba(100,116,139,0.15); color: #64748B; }
+.badge-suspended { background: rgba(239,68,68,0.12);  color: #EF4444; }
+.badge-warning   { background: rgba(245,158,11,0.12); color: #F59E0B; }
+
+/* ─── Sidebar nav link ────────────────────────────────────────────────────── */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.nav-link:hover  { background: var(--bg-raised); color: var(--text-primary); }
+.nav-link.active { background: var(--accent-dim); color: var(--accent-hover); font-weight: 500; }
+
+/* ─── Table ───────────────────────────────────────────────────────────────── */
+.table-row { transition: background 0.1s; }
+.table-row:hover { background: var(--bg-raised); }
+
+/* ─── Progress bar ────────────────────────────────────────────────────────── */
+.progress-track {
+  height: 5px;
+  background: var(--bg-raised);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
