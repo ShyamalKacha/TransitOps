@@ -76,7 +76,9 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.get("/users", response_model=list[UserOut], dependencies=[Depends(get_admin_user)])
 async def list_users(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    result = await db.execute(
+        select(User).where(User.role != "admin").order_by(User.created_at.desc())
+    )
     return result.scalars().all()
 
 
@@ -86,6 +88,8 @@ async def update_user_role(user_id: str, body: UserRoleUpdate, db: AsyncSession 
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.role == "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify admin user")
     valid_roles = {"fleet_manager", "dispatcher", "driver", "safety_officer", "financial_analyst"}
     if body.role not in valid_roles:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role. Must be one of: {valid_roles}")
@@ -93,3 +97,15 @@ async def update_user_role(user_id: str, body: UserRoleUpdate, db: AsyncSession 
     await db.flush()
     await db.refresh(user)
     return user
+
+
+@router.delete("/users/{user_id}", status_code=204, dependencies=[Depends(get_admin_user)])
+async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.role == "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete admin user")
+    await db.delete(user)
+    await db.flush()

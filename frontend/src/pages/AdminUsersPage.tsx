@@ -9,6 +9,7 @@ import { Select } from '../components/ui/Select';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { ROLE_LABELS } from '../utils/constants';
 import { formatDateTime } from '../utils/formatters';
 import type { User, UserRole } from '../types';
@@ -62,6 +63,9 @@ export function AdminUsersPage() {
   const [newRole, setNewRole] = useState<UserRole | ''>('');
   const [roleSubmitting, setRoleSubmitting] = useState(false);
   const [roleError, setRoleError] = useState('');
+
+  // ---- Delete state ----
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // ---- Auth guard ----
   useEffect(() => {
@@ -166,16 +170,28 @@ export function AdminUsersPage() {
       key: 'actions',
       header: '',
       render: (u) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            openRoleModal(u);
-          }}
-        >
-          Change Role
-        </Button>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              openRoleModal(u);
+            }}
+          >
+            Change Role
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeleteId(u.id);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];
@@ -297,6 +313,23 @@ export function AdminUsersPage() {
           </div>
         )}
       </Modal>
+
+      {/* Delete Confirm */}
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={async () => {
+          if (deleteId) {
+            await api.delete(`/admin/users/${deleteId}`);
+            setDeleteId(null);
+            fetchUsers();
+          }
+        }}
+        title="Delete User"
+        message="Are you sure you want to delete this user? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
