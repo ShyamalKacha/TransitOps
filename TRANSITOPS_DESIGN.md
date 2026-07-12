@@ -62,32 +62,32 @@ Logistics companies manage vehicles, drivers, trips, maintenance, and expenses u
 
 ## 2. System Architecture
 
-```
-┌─────────────────────────────────────────────────┐
-│                   Frontend                      │
-│         Vite + React + Tailwind                 │
-│         Zustand Stores                          │
-│         React Router                            │
-│         Recharts (charts)                       │
-└──────────────────────┬──────────────────────────┘
-                       │ HTTP (JSON)
-                       │ JWT in Authorization header
-                       ▼
-┌─────────────────────────────────────────────────┐
-│                   Backend                       │
-│           FastAPI + Uvicorn                     │
-│  ┌──────┬──────┬──────┬──────┬──────┬──────┐   │
-│  │ Auth │ Veh. │ Drv. │ Trip │ Maint│ Fuel │   │
-│  └──────┴──────┴──────┴──────┴──────┴──────┘   │
-│  │ Common: exceptions, middleware, deps         │
-│  └──────────────┬───────────────────────────────┘
-                  │ SQLAlchemy (async)
-                  ▼
-┌─────────────────────────────────────────────────┐
-│              PostgreSQL 16 (Docker)              │
-│  users | vehicles | drivers | trips             │
-│  maintenance_records | fuel_logs | expenses     │
-└─────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Frontend["Frontend"]
+        A1["Vite + React + Tailwind"]
+        A2["Zustand Stores"]
+        A3["React Router"]
+        A4["Recharts (charts)"]
+    end
+
+    subgraph Backend["Backend - FastAPI + Uvicorn"]
+        B1["Auth"]
+        B2["Vehicles"]
+        B3["Drivers"]
+        B4["Trips"]
+        B5["Maintenance"]
+        B6["Fuel & Expenses"]
+        BC["Common: exceptions, middleware, deps"]
+    end
+
+    subgraph Database["PostgreSQL 16 (Docker)"]
+        C1["users \| vehicles \| drivers \| trips"]
+        C2["maintenance_records \| fuel_logs \| expenses"]
+    end
+
+    Frontend -->|"HTTP (JSON) / JWT"| Backend
+    Backend -->|"SQLAlchemy (async)"| Database
 ```
 
 ### 2.1 Design Principles
@@ -389,16 +389,60 @@ CREATE INDEX idx_expenses_type ON expenses(type);
 
 ## 5. Entity Relationships
 
-```
-users (1) ──< no direct FK to domain entities (RBAC only)
+```mermaid
+erDiagram
+    users ||--o{ vehicles : manages
+    users ||--o{ drivers : manages
+    users ||--o{ trips : manages
 
-vehicles (1) ──< trips (N)       via vehicle_id
-vehicles (1) ──< maintenance_records (N)
-vehicles (1) ──< fuel_logs (N)
-vehicles (1) ──< expenses (N)
+    vehicles ||--o{ trips : "via vehicle_id"
+    vehicles ||--o{ maintenance_records : "via vehicle_id"
+    vehicles ||--o{ fuel_logs : "via vehicle_id"
+    vehicles ||--o{ expenses : "via vehicle_id"
 
-drivers (1) ──< trips (N)        via driver_id
-drivers (1) ──< fuel_logs (N)    optional
+    drivers ||--o{ trips : "via driver_id"
+    drivers ||--o{ fuel_logs : "optional"
+
+    users {
+        uuid id PK
+        string email
+        string role "fleet_manager | driver | safety_officer | financial_analyst"
+    }
+    vehicles {
+        uuid id PK
+        string registration_number UK
+        string status "available | on_trip | in_shop | retired"
+        decimal max_load_capacity
+    }
+    drivers {
+        uuid id PK
+        string license_number UK
+        date license_expiry_date
+        string status "available | on_trip | off_duty | suspended"
+    }
+    trips {
+        uuid id PK
+        uuid vehicle_id FK
+        uuid driver_id FK
+        string status "draft | dispatched | completed | cancelled"
+    }
+    maintenance_records {
+        uuid id PK
+        uuid vehicle_id FK
+        string status "open | closed"
+    }
+    fuel_logs {
+        uuid id PK
+        uuid vehicle_id FK
+        uuid driver_id FK "nullable"
+        decimal liters
+        decimal total_cost "computed: liters * cost_per_liter"
+    }
+    expenses {
+        uuid id PK
+        uuid vehicle_id FK
+        string type "toll | maintenance | other"
+    }
 ```
 
 **Key relational rules enforced at the service layer:**
@@ -413,55 +457,44 @@ drivers (1) ──< fuel_logs (N)    optional
 
 ### 6.1 Vehicle State Machine
 
-```
-                    ┌──────────┐
-         ┌─────────►│ On Trip  │◄──────────┐
-         │          └──────────┘           │
-         │                                 │
-    ┌────────┐    dispatch trip     ┌───────────┐
-    │Availble│◄─── complete trip ───┤  In Shop  │
-    └────────┘                      └───────────┘
-         │                                 ▲
-         │  create maintenance             │ close maintenance
-         │  (auto)                         │
-         ▼                                 │
-    ┌──────────┐                           │
-    │ Retired  │                           │
-    └──────────┘                           │
-         ▲                                 │
-         └──── manual (fleet manager) ─────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Available : vehicle registered
+    Available --> On_Trip : dispatch trip
+    Available --> In_Shop : create maintenance (auto)
+    Available --> Retired : manual (fleet manager)
+    On_Trip --> Available : complete trip
+    On_Trip --> In_Shop : breakdown during trip
+    In_Shop --> Available : close maintenance
+    Retired --> Available : manual reactivate
+    Retired --> In_Shop : manual
 ```
 
 ### 6.2 Driver State Machine
 
-```
-                    ┌──────────┐
-         ┌─────────►│ On Trip  │◄──────────┐
-         │          └──────────┘           │
-         │                                 │
-    ┌────────┐    dispatch trip          ┌────────┐
-    │Availble│◄─── complete/cancel trip   │Off Duty│
-    └────────┘                            └────────┘
-         │                                   ▲
-         │  manual / suspend                 │  manual
-         ▼                                   │
-    ┌──────────┐                             │
-    │ Suspended│─────────────────────────────┘
-    └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Available : driver registered
+    Available --> On_Trip : dispatch trip
+    Available --> Off_Duty : manual
+    Available --> Suspended : manual / suspend
+    On_Trip --> Available : complete / cancel trip
+    Off_Duty --> Available : manual
+    Suspended --> Available : manual
+    Suspended --> Off_Duty : manual
 ```
 
 ### 6.3 Trip State Machine
 
-```
-    ┌───────┐   dispatch   ┌──────────┐   complete   ┌───────────┐
-    │ Draft │─────────────►│Dispatched│──────────────►│ Completed │
-    └───────┘              └──────────┘               └───────────┘
-         │                      │
-         │   cancel             │   cancel
-         ▼                      ▼
-    ┌──────────┐          ┌──────────┐
-    │ Cancelled│          │ Cancelled│
-    └──────────┘          └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Draft : trip created
+    Draft --> Dispatched : dispatch
+    Draft --> Cancelled : cancel
+    Dispatched --> Completed : complete
+    Dispatched --> Cancelled : cancel
+    Completed --> [*]
+    Cancelled --> [*]
 ```
 
 ### 6.4 Business Rules (enforced in TripService)
@@ -603,30 +636,34 @@ Paginated list responses:
 
 ### 8.1 Auth Flow
 
-```
-                  ┌──────────┐
-                  │  Client  │
-                  └────┬─────┘
-                       │ POST /api/auth/login { email, password }
-                       ▼
-              ┌────────────────┐
-              │   Verify creds │
-              │ (argon2 hash)  │
-              └───────┬────────┘
-                      │ OK
-                      ▼
-              ┌────────────────┐
-              │ Issue JWT pair │
-              │ - access (15m) │
-              │ - refresh (7d) │
-              └───────┬────────┘
-                      │
-                      ▼
-            Client stores tokens
-          (localStorage/memory)
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as FastAPI Backend
+    participant DB as PostgreSQL
 
-    Subsequent requests:
-    Authorization: Bearer <access_token>
+    Client->>API: POST /api/auth/login { email, password }
+    API->>DB: Query user by email
+    DB-->>API: User record + password_hash
+    API->>API: Verify password (argon2)
+    alt Invalid credentials
+        API-->>Client: 401 Unauthorized
+    else Valid credentials
+        API->>API: Generate JWT pair
+        Note right of API: access: 15min<br/>refresh: 7 days
+        API-->>Client: { access_token, refresh_token, user }
+        Client->>Client: Store tokens (localStorage/memory)
+    end
+
+    Note over Client,API: Subsequent requests
+    Client->>API: GET /api/resource (Authorization: Bearer &lt;access_token&gt;)
+    API->>API: Validate JWT signature + expiry
+    alt Token valid
+        API-->>Client: 200 OK { data }
+    else Token expired
+        Client->>API: POST /api/auth/refresh { refresh_token }
+        API-->>Client: { access_token, refresh_token }
+    end
 ```
 
 ### 8.2 JWT Payload
@@ -717,26 +754,38 @@ def require_roles(*roles: str):
 
 ### 9.2 Component Tree
 
-```
-<App>
-  <BrowserRouter>
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route element={<ProtectedRoute />}>
-        <Route element={<MainLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/vehicles" element={<VehiclesPage />} />
-          <Route path="/drivers" element={<DriversPage />} />
-          <Route path="/trips" element={<TripsPage />} />
-          <Route path="/maintenance" element={<MaintenancePage />} />
-          <Route path="/fuel-expenses" element={<FuelExpensesPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-        </Route>
-      </Route>
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
-  </BrowserRouter>
-</App>
+```mermaid
+graph TD
+    APP["&lt;App&gt;"]
+    BR["&lt;BrowserRouter&gt;"]
+    RS["&lt;Routes&gt;"]
+
+    Login["/login → &lt;LoginPage /&gt;"]
+    PR["&lt;ProtectedRoute /&gt;"]
+    ML["&lt;MainLayout /&gt;"]
+
+    DASH["/dashboard → DashboardPage"]
+    VEH["/vehicles → VehiclesPage"]
+    DRV["/drivers → DriversPage"]
+    TRP["/trips → TripsPage"]
+    MNT["/maintenance → MaintenancePage"]
+    FEL["/fuel-expenses → FuelExpensesPage"]
+    ANL["/analytics → AnalyticsPage"]
+    NF["* → NotFoundPage"]
+
+    APP --> BR
+    BR --> RS
+    RS --> Login
+    RS --> PR
+    RS --> NF
+    PR --> ML
+    ML --> DASH
+    ML --> VEH
+    ML --> DRV
+    ML --> TRP
+    ML --> MNT
+    ML --> FEL
+    ML --> ANL
 ```
 
 ### 9.3 Zustand Store Pattern
@@ -783,62 +832,71 @@ interface VehicleStore {
 
 ### 10.1 Trip Dispatch Flow (most complex operation)
 
-```
-User clicks "Dispatch"
-       │
-       ▼
-Frontend: PATCH /api/trips/{id}/dispatch
-       │
-       ▼
-TripService.dispatch(trip_id):
-  │
-  ├─ 1. Load trip with vehicle + driver (eager load)
-  ├─ 2. Check trip.status == 'draft'     → else 422
-  ├─ 3. Check vehicle.status == 'available' → else 422 "Vehicle already in use/retired/in shop"
-  ├─ 4. Check driver.status == 'available'  → else 422 "Driver not available"
-  ├─ 5. Check driver.license_expiry > today → else 422 "License expired"
-  ├─ 6. Check cargo_weight ≤ vehicle.max_load_capacity → else 422 "Overloaded"
-  │
-  ├─ Begin transaction:
-  │   ├─ trip.status = 'dispatched'
-  │   ├─ trip.dispatched_at = now()
-  │   ├─ vehicle.status = 'on_trip'
-  │   ├─ driver.status = 'on_trip'
-  │   └─ Commit
-  │
-  └─ Return updated trip (with vehicle + driver statuses)
-       │
-       ▼
-Frontend: update tripStore → UI reflects dispatched state
+```mermaid
+flowchart TD
+    A["User clicks 'Dispatch'"] --> B
+    subgraph B["Frontend"]
+        B1["PATCH /api/trips/{id}/dispatch"]
+    end
+
+    B1 --> C
+    subgraph C["TripService.dispatch(trip_id)"]
+        direction TB
+        C1["1. Load trip + vehicle + driver (eager load)"]
+        C2["2. Check trip.status == 'draft'"]
+        C3["3. Check vehicle.status == 'available'"]
+        C4["4. Check driver.status == 'available'"]
+        C5["5. Check driver.license_expiry > today"]
+        C6["6. Check cargo_weight ≤ max_load_capacity"]
+
+        C1 --> C2
+        C2 -->|"fail → 422"| ERR1["422: Invalid status"]
+        C2 -->|"pass"| C3
+        C3 -->|"fail → 422"| ERR2["422: Vehicle in use/retired/shop"]
+        C3 -->|"pass"| C4
+        C4 -->|"fail → 422"| ERR3["422: Driver not available"]
+        C4 -->|"pass"| C5
+        C5 -->|"fail → 422"| ERR4["422: License expired"]
+        C5 -->|"pass"| C6
+        C6 -->|"fail → 422"| ERR5["422: Overloaded"]
+        C6 -->|"pass"| TXN
+    end
+
+    subgraph TXN["Atomic Transaction"]
+        TXN1["trip.status = 'dispatched'"]
+        TXN2["trip.dispatched_at = now()"]
+        TXN3["vehicle.status = 'on_trip'"]
+        TXN4["driver.status = 'on_trip'"]
+        TXN1 --> TXN2 --> TXN3 --> TXN4 --> COMMIT["Commit"]
+    end
+
+    COMMIT --> D["Return updated trip"]
+    D --> E["Frontend: update tripStore → UI reflects dispatched state"]
 ```
 
 ### 10.2 Dashboard Aggregation Flow
 
-```
-GET /api/analytics/dashboard
-       │
-       ▼
-AnalyticsService.get_dashboard():
-  │
-  ├─ Vehicle status counts (6 queries combined into 1)
-  │   SELECT status, COUNT(*) FROM vehicles GROUP BY status
-  │
-  ├─ Active trips count
-  │   SELECT COUNT(*) FROM trips WHERE status = 'dispatched'
-  │
-  ├─ Pending trips count
-  │   SELECT COUNT(*) FROM trips WHERE status = 'draft'
-  │
-  ├─ Drivers on duty
-  │   SELECT COUNT(*) FROM drivers WHERE status IN ('available','on_trip')
-  │
-  ├─ Fleet utilization %
-  │   (on_trip / total_active) * 100
-  │
-  └─ Return aggregated KPI object
-       │
-       ▼
-Frontend: render KpiCards + charts
+```mermaid
+flowchart TD
+    A["GET /api/analytics/dashboard"] --> B
+
+    subgraph B["AnalyticsService.get_dashboard()"]
+        direction TB
+        Q1["Vehicle status counts<br/><code>SELECT status, COUNT(*) FROM vehicles GROUP BY status</code>"]
+        Q2["Active trips count<br/><code>SELECT COUNT(*) FROM trips WHERE status = 'dispatched'</code>"]
+        Q3["Pending trips count<br/><code>SELECT COUNT(*) FROM trips WHERE status = 'draft'</code>"]
+        Q4["Drivers on duty<br/><code>SELECT COUNT(*) FROM drivers WHERE status IN ('available','on_trip')</code>"]
+        Q5["Fleet utilization %<br/><code>(on_trip / total_active) × 100</code>"]
+
+        Q1 --> AGG
+        Q2 --> AGG
+        Q3 --> AGG
+        Q4 --> AGG
+        Q5 --> AGG
+    end
+
+    AGG["Aggregate KPI object"] --> C
+    C["Frontend: render KpiCards + charts"]
 ```
 
 ---
