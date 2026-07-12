@@ -29,7 +29,7 @@ export function MaintenancePage() {
 
   useEffect(() => { fetchRecords({ status: statusFilter || undefined }); }, [statusFilter]);
   useEffect(() => {
-    api.get('/vehicles').then(({ data }) => setVehicles((data.data ?? data).map((v: any) => ({ id: v.id, name: v.registration_number }))));
+    api.get('/vehicles').then(({ data }) => setVehicles((data.data ?? data).map((v: any) => ({ id: String(v.id), name: v.registration_number }))));
   }, []);
 
   const handleCreate = async () => {

@@ -7,8 +7,19 @@ import {
 import { useAnalyticsStore } from '../stores/analyticsStore';
 import { Button } from '../components/ui/Button';
 import { formatCurrency } from '../utils/formatters';
+import api from '../api/client';
 
 const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444'];
+
+async function downloadExport(path: string, filename: string) {
+  const { data } = await api.get(path, { responseType: 'blob' });
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function FinancialAnalyticsPage() {
   const {
@@ -38,8 +49,8 @@ export function FinancialAnalyticsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold dark:text-gray-100">Financial Analytics</h1>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => window.open('/api/analytics/export/csv')}>Export CSV</Button>
-          <Button variant="secondary" onClick={() => window.open('/api/analytics/export/pdf')}>Export PDF</Button>
+          <Button variant="secondary" onClick={() => downloadExport('/analytics/export/csv', 'transitops-report.csv')}>Export CSV</Button>
+          <Button variant="secondary" onClick={() => downloadExport('/analytics/export/pdf', 'transitops-report.pdf')}>Export PDF</Button>
         </div>
       </div>
 
